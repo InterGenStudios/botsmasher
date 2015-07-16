@@ -1,0 +1,329 @@
+#!/bin/bash
+# botsmasher
+# -------------------------------------------------------
+# botsmasher: A server utility for banning bot IPs found in logs
+# version: .03
+# Github: https://github.com/InterGenStudios
+# ---------------------------------------------------
+# InterGenStudios: 7-11-15
+# Copyright (c) 2015: Christopher 'InterGen' Cork  InterGenStudios
+# --------------------------------
+# License: GPL-2.0+
+# URL: http://opensource.org/licenses/gpl-license.php
+# ---------------------------------------------------
+# botsmasher is free software:
+# You may redistribute it and/or modify it under the terms of the
+# GNU General Public License as published by the Free Software
+# Foundation, either version 2 of the License, or (at your discretion)
+# any later version.
+# ------------------
+
+
+# To Do List
+# Identify and implement remaining log locations
+
+
+###########################################
+##---------------------------------------##
+## BEGIN - INITIAL VARIABLE DECLARATIONS ##
+##---------------------------------------##
+###########################################
+
+# Set timestamp
+TIMESTAMP="$(date +"%m-%d-%Y_%T")"
+
+RED="\e[1m\e[31m"
+GREEN="\e[1m\e[32m"
+YELLOW="\e[1m\e[33m"
+BLUE="\e[1m\e[34m"
+WHITE="\e[1m\e[37m"
+NOCOLOR="\e[0m"
+BLINK="\e[5m"
+UNDERLINE_TEXT="\e[4m"
+
+#########################################
+##-------------------------------------##
+## END - INITIAL VARIABLE DECLARATIONS ##
+##-------------------------------------##
+#########################################
+
+##############################
+##--------------------------##
+## BEGIN - SCRIPT FUNCTIONS ##
+##--------------------------##
+##############################
+
+#----------------------------------#
+# BEGIN - DISPLAY LAYOUT FUNCTIONS #
+#----------------------------------#
+
+# Simple divider
+DIVIDER () {
+
+    echo -e "\n${GREEN}---------------------------------------------------------${NOCOLOR}\n"
+
+}
+
+# Creates uniform look during script execution when called after any clear command
+HEADER () {
+
+    echo -e "\n${BLUE}______________________________________________________________________________________${NOCOLOR}\n"
+    echo -e "${WHITE}    BotSmasher ${GREEN}version${NOCOLOR}.03    ran on $TIMESTAMP"
+    echo -e "${BLUE}______________________________________________________________________________________${NOCOLOR}\n"
+
+}
+
+#--------------------------------#
+# END - DISPLAY LAYOUT FUNCTIONS #
+#--------------------------------#
+
+ID_PANEL () {
+
+    if [ -d /usr/local/cpanel ]; then
+        PANEL="WHM"
+    elif [ -d /usr/local/psa ]; then
+        PANEL="Plesk"
+    elif [ -d /usr/local/directadmin ]; then
+        PANEL="DirectAdmin"
+    else
+        PANEL="UnDefined"
+    fi
+
+}
+
+ID_WEBSERVER () {
+
+    # Identify running Apache webserver
+    if [ -n "$(ps aux | grep httpd | grep -v grep)" ]; then A_W_S=running; fi
+
+    # Identify running Litespeed webserver
+    if [ -n "$(ps aux | grep lsws | grep -v grep)" ]; then L_W_S=running; fi
+
+    # Identify running Nginx webserver
+    if [ -n "$(ps aux | grep nginx | grep -v grep)" ]; then N_W_S=running; fi
+
+}
+
+GET_SEARCH_PATHS () {
+
+    if [ "$PANEL" = "WHM" ]; then
+        cat whm.paths >> search_paths
+    elif [ "$PANEL" = "Plesk" ]; then
+        cat plesk.paths >> search_paths
+    elif [ "$PANEL" = "DirectAdmin" ]; then
+        cat da.paths >> search_paths
+    else
+        find / -type f -iname '*xferlog' >> search_paths
+        find / -type f -iname 'auth*log' >> search_paths
+        find / -type f -iname 'access*log' >> search_paths
+    fi
+
+}
+
+GET_IPS_TO_MATCH () {
+
+    echo SCANNING > running_status
+    for PATHS in $(cat search_paths); do
+        egrep -s -o "([0-9]{1,3}[\.]){3}[0-9]{1,3}" $PATHS | sort | uniq >> found_ips
+    done
+    sort found_ips >> ips_to_match
+    > running_status
+}
+
+MATCH_BOT_IPS () {
+    echo MATCHING > running_status
+    wget -qO- http://listed.privatesystems.net/latest/stopforumspam.com/bannedips.csv | sort >> spam_ips
+    comm -12 spam_ips ips_to_match >> bot_ips
+    > running_status
+}
+
+BOT_SMASHER () {
+    echo SMASHING > running_status
+    iptables -F DROPSPAMMERS 2>/dev/null
+    iptables -X DROPSPAMMERS 2>/dev/null
+    iptables -N DROPSPAMMERS 2>/dev/null
+    for IP in $(cat bot_ips); do
+        echo $IP | xargs -I % sh -c ' iptables -A DROPSPAMMERS -j DROP -s %; echo "Dropped %";' | tee >> dropped_bots
+    done
+    > running_status
+}
+
+SHOW_SCAN_PROGRESS () {
+
+    while [ "$(cat running_status)" = "SCANNING" ]; do
+        echo -e "    ${GREEN}Scanning logs for IPs         ${WHITE}Found: ${GREEN}$(wc -l found_ips | awk '{print $1}')${NOCOLOR}"
+        sleep .2
+        tput cuu 1 && tput el
+        echo -e "    ${GREEN}Scanning logs for IPs ${BLUE}.       ${WHITE}Found: ${GREEN}$(wc -l found_ips | awk '{print $1}')${NOCOLOR}"
+        sleep .2
+        tput cuu 1 && tput el
+        echo -e "    ${GREEN}Scanning logs for IPs ${BLUE}..      ${WHITE}Found: ${GREEN}$(wc -l found_ips | awk '{print $1}')${NOCOLOR}"
+        sleep .2
+        tput cuu 1 && tput el
+        echo -e "    ${GREEN}Scanning logs for IPs ${BLUE}...     ${WHITE}Found: ${GREEN}$(wc -l found_ips | awk '{print $1}')${NOCOLOR}"
+        sleep .2
+        tput cuu 1 && tput el
+        echo -e "    ${GREEN}Scanning logs for IPs ${BLUE}....    ${WHITE}Found: ${GREEN}$(wc -l found_ips | awk '{print $1}')${NOCOLOR}"
+        sleep .2
+        tput cuu 1 && tput el
+        echo -e "    ${GREEN}Scanning logs for IPs ${BLUE}.....   ${WHITE}Found: ${GREEN}$(wc -l found_ips | awk '{print $1}')${NOCOLOR}"
+        sleep .2
+        tput cuu 1 && tput el
+    done
+
+}
+
+SHOW_MATCH_PROGRESS () {
+
+    while [ "$(cat running_status)" = "MATCHING" ]; do
+        echo -e "    ${GREEN}Matching IPs to known evil-doers${NOCOLOR}"
+        sleep .2
+        tput cuu 1 && tput el
+        echo -e "    ${GREEN}Matching IPs to known evil-doers ${BLUE}.${NOCOLOR}"
+        sleep .2
+        tput cuu 1 && tput el
+        echo -e "    ${GREEN}Matching IPs to known evil-doers ${BLUE}..${NOCOLOR}"
+        sleep .2
+        tput cuu 1 && tput el
+        echo -e "    ${GREEN}Matching IPs to known evil-doers ${BLUE}...${NOCOLOR}"
+        sleep .2
+        tput cuu 1 && tput el
+        echo -e "    ${GREEN}Matching IPs to known evil-doers ${BLUE}....${NOCOLOR}"
+        sleep .2
+        tput cuu 1 && tput el
+        echo -e "    ${GREEN}Matching IPs to known evil-doers ${BLUE}.....${NOCOLOR}"
+        sleep .2
+        tput cuu 1 && tput el
+    done
+
+}
+
+SHOW_SMASHER_PROGRESS () {
+
+    while [ "$(cat running_status)" = "SMASHING" ]; do
+        echo -e "    ${GREEN}SMASHING BOT IPs${NOCOLOR}"
+        sleep .2
+        tput cuu 1 && tput el
+        echo -e "    ${GREEN}SMASHING BOT IPs ${BLUE}.${NOCOLOR}"
+        sleep .2
+        tput cuu 1 && tput el
+        echo -e "    ${GREEN}SMASHING BOT IPs ${BLUE}..${NOCOLOR}"
+        sleep .2
+        tput cuu 1 && tput el
+        echo -e "    ${GREEN}SMASHING BOT IPs ${BLUE}...${NOCOLOR}"
+        sleep .2
+        tput cuu 1 && tput el
+        echo -e "    ${GREEN}SMASHING BOT IPs ${BLUE}....${NOCOLOR}"
+        sleep .2
+        tput cuu 1 && tput el
+        echo -e "    ${GREEN}SMASHING BOT IPs ${BLUE}.....${NOCOLOR}"
+        sleep .2
+        tput cuu 1 && tput el
+    done
+
+}
+
+BASHTRAP () {
+
+    clear
+    HEADER
+    echo -e "\n\n    ${RED}Scan Terminated!\n    Killing Children...  :)\n\n${NOCOLOR}"
+    sleep .7
+    ps aufx | grep botsmasher | grep -v grep | awk '{print $2}' > pid_list
+    for PID in $(tac pid_list); do rm found_ips dropped_bots bot_ips ips_to_match running_status spam_ips search_paths pid_list whm.paths plesk.paths da.paths 2> /dev/null; kill -9 $PID 2> /dev/null; done
+
+}
+
+############################
+##------------------------##
+## END - SCRIPT FUNCTIONS ##
+##------------------------##
+############################
+
+#############################################
+##-----------------------------------------##
+## BEGIN - MAKE SURE WE'RE RUNNING AS ROOT ##
+##-----------------------------------------##
+#############################################
+
+if [ "$(id -u)" != "0" ]; then
+    echo -e "\n\n${RED}${BLINK}--------${NOCOLOR}"
+    echo -e "${RED}${BLINK}WARNING!${NOCOLOR}"
+    echo -e "${RED}${BLINK}--------${NOCOLOR}\n\n"
+    echo -e "${WHITE}BotSmasher must be run as ${RED}root${NOCOLOR}\n\n"
+    echo -e "${GREEN}(Exiting now...)${NOCOLOR}\n\n"
+    exit 1
+fi
+
+###########################################
+##---------------------------------------##
+## END - MAKE SURE WE'RE RUNNING AS ROOT ##
+##---------------------------------------##
+###########################################
+
+#########################
+##---------------------##
+## BEGIN - CORE SCRIPT ##
+##---------------------##
+#########################
+
+cat > whm.paths << "EndOfWHM.PATHS"
+/var/log/messages
+/usr/local/cpanel/logs/access_log
+/usr/local/apache/logs/access_log
+/usr/local/apache/domlogs/ftpxferlog
+EndOfWHM.PATHS
+
+cat > plesk.paths << "EndOfPLESK.PATHS"
+/var/log/messages
+/var/log/httpd/*
+EndOfPLESK.PATHS
+
+cat > da.paths << "EndOfDA.PATHS"
+/var/log/messages
+/var/log/httpd/*
+EndOfDA.PATHS
+
+# Ran if CTRL+C is sent
+trap BASHTRAP INT
+
+clear
+HEADER
+ID_PANEL
+ID_WEBSERVER
+echo -e "${WHITE}    Server Control Panel:${NOCOLOR}"
+echo -e "${BLUE}    --------------------${NOCOLOR}"
+echo -e "${BLUE}    ====> ${GREEN}$PANEL${NOCOLOR}\n"
+echo -e "${WHITE}    Running WebServers:${NOCOLOR}"
+echo -e "${BLUE}    ------------------${NOCOLOR}"
+if [ "$A_W_S" = "running" ]; then echo -e "${BLUE}    ====> ${GREEN}APACHE${NOCOLOR}"; fi
+if [ "$N_W_S" = "running" ]; then echo -e "${BLUE}    ====> ${GREEN}NGINX${NOCOLOR}"; fi
+if [ "$L_W_S" = "running" ]; then echo -e "${BLUE}    ====> ${GREEN}LITESPEED${NOCOLOR}"; fi
+echo -e "\n${WHITE}    Scanning the following log locations:${NOCOLOR}"
+echo -e "${BLUE}    ------------------------------------${NOCOLOR}"
+GET_SEARCH_PATHS
+for LIST_PATH in $(cat search_paths); do echo -e "${BLUE}    ====> ${GREEN}$LIST_PATH${NOCOLOR}"; done
+DIVIDER
+GET_IPS_TO_MATCH & sleep .2 && SHOW_SCAN_PROGRESS &&
+tput cuu 1 && tput el
+echo -e "\n${WHITE}    Found ${GREEN}$(wc -l ips_to_match | awk '{print $1}') ${WHITE}unique IPs in the logs${NOCOLOR}"
+DIVIDER
+MATCH_BOT_IPS & sleep .2 && SHOW_MATCH_PROGRESS &&
+tput cuu 1 && tput el
+echo -e "\n${WHITE}    Matched ${GREEN}$(wc -l bot_ips | awk '{print $1}') ${WHITE}IPs${NOCOLOR}"
+DIVIDER
+BOT_SMASHER & sleep .2 && SHOW_SMASHER_PROGRESS &&
+clear
+HEADER
+echo -e "    ${GREEN}BotSmasher${NOCOLOR} run complete\n"
+echo -e "    Banned ${WHITE}$(wc -l dropped_bots | awk '{print $1}') ${NOCOLOR}Bot IPs\n"
+rm found_ips dropped_bots bot_ips ips_to_match running_status spam_ips search_paths whm.paths plesk.paths da.paths
+DIVIDER
+
+#######################
+##-------------------##
+## END - CORE SCRIPT ##
+##-------------------##
+#######################
+
+exit 0
