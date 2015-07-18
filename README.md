@@ -1,4 +1,4 @@
-![alt text](https://raw.githubusercontent.com/InterGenStudios/botsmasher/master/BotSmasher-375x275.jpg "BotSmasher")
+![alt text](https://raw.githubusercontent.com/InterGenStudios/botsmasher/master/BotSmasherv03-375x275.jpg "BotSmasher")
 
 # BotSmasher
 ---
