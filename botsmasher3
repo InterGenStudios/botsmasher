@@ -31,6 +31,7 @@
 
 # Set timestamp
 TIMESTAMP="$(date +"%m-%d-%Y_%T")"
+VERSION=".03"
 
 RED="\e[1m\e[31m"
 GREEN="\e[1m\e[32m"
@@ -143,7 +144,7 @@ BOT_SMASHER () {
     iptables -X DROPSPAMMERS 2>/dev/null
     iptables -N DROPSPAMMERS 2>/dev/null
     for IP in $(cat bot_ips); do
-        echo $IP | xargs -I % sh -c ' iptables -A DROPSPAMMERS -j DROP -s %; echo "Dropped %";' | tee >> dropped_bots
+        echo $IP | xargs -I % sh -c ' iptables -A DROPSPAMMERS -j DROP -s %; echo "%";' | tee >> dropped_bots
     done
     > running_status
 }
@@ -316,9 +317,27 @@ BOT_SMASHER & sleep .2 && SHOW_SMASHER_PROGRESS &&
 clear
 HEADER
 echo -e "    ${GREEN}BotSmasher${NOCOLOR} run complete\n"
-echo -e "    Banned ${WHITE}$(wc -l dropped_bots | awk '{print $1}') ${NOCOLOR}Bot IPs\n"
-rm found_ips dropped_bots bot_ips ips_to_match running_status spam_ips search_paths whm.paths plesk.paths da.paths
+echo -e "    Banned ${WHITE}$(wc -l dropped_bots | awk '{print $1}') ${NOCOLOR}Bot IPs"
+BOT_LIST="$(cat dropped_bots)"
+>dropped_bots
+{
+    echo "====================================="
+    echo " BotSmasher v$VERSION"
+    echo " "
+    echo " Run on $TIMESTAMP"
+    echo "====================================="
+    echo " "
+    echo "Banned the following evil-doer IPs:"
+    echo " "
+    echo "$BOT_LIST"
+} >> dropped_bots
+mkdir -p /var/log/botsmasher
+mv dropped_bots /var/log/botsmasher/log_"$TIMESTAMP"
 DIVIDER
+echo -e "$GREEN    Dropped IP Log can be viewed at:$NOCOLOR"
+echo -e "$BLUE       ====>  $WHITE/var/log/botsmasher/log_$TIMESTAMP$NOCOLOR"
+DIVIDER
+rm found_ips bot_ips ips_to_match running_status spam_ips search_paths whm.paths plesk.paths da.paths
 
 #######################
 ##-------------------##
