@@ -7,7 +7,7 @@ A handy bash utility for banning bot/spammer IPs found in ftp and access logs
 
 ### Watch BotSmasher in action:
 
- :cinema: http://teeny.ml/botsmasher3
+ :cinema: https://ittybitty.site/botsmasher3
 
 
 #### To use:
